@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Encrypt &amp; Decrypt API</title>
+  <style>
+    :root {
+      --ink: #2a1848;
+      --muted: #6d5a86;
+      --line: #eadff5;
+      --card: #fffbfe;
+      --field: #faf6ff;
+      --accent: #6d35c9;
+      --danger: #9a2f5a;
+      --danger-bg: #fdeef5;
+      --btn: linear-gradient(90deg, #3c2b9e 0%, #6a34c8 48%, #c44adc 100%);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(720px 300px at 0% 0%, rgba(196, 74, 220, 0.16), transparent 60%),
+        radial-gradient(640px 280px at 100% 100%, rgba(60, 43, 158, 0.14), transparent 58%),
+        #f7f2f8;
+      font-family: "Segoe UI", "Segoe UI Variable Text", sans-serif;
+    }
+
+    main {
+      width: min(1240px, calc(100% - 36px));
+      height: calc(100% - 40px);
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      height: 100%;
+      align-items: stretch;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      padding: 28px 26px 22px;
+      background: #fff;
+      border-radius: 22px;
+      box-shadow: 0 18px 48px rgba(91, 33, 182, 0.14);
+    }
+
+    .head {
+      margin-bottom: 16px;
+      text-align: center;
+      flex: 0 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.12;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .lede {
+      margin: 8px auto 0;
+      max-width: 42ch;
+      color: #6b5b7b;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 680;
+      letter-spacing: 0.01em;
+    }
+
+    textarea {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      height: auto;
+      margin-top: 8px;
+      padding: 14px 16px;
+      color: var(--ink);
+      background: var(--field);
+      border: 1px solid #e6daf4;
+      border-radius: 12px;
+      resize: none;
+      font: 14px/1.4 Consolas, "Cascadia Mono", monospace;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    textarea:focus {
+      outline: none;
+      background: #fff;
+      border-color: #c084fc;
+      box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.16);
+    }
+
+    button { font: inherit; cursor: pointer; }
+
+    button:disabled { cursor: wait; }
+
+    label[for="value"] {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      text-align: left;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 18px;
+      flex: 0 0 auto;
+    }
+
+    .action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 58px;
+      padding: 0 18px;
+      color: #fff;
+      background: var(--btn);
+      border: 0;
+      border-radius: 14px;
+      box-shadow: 0 10px 22px rgba(124, 58, 237, 0.32);
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+
+    .action svg { width: 18px; height: 18px; }
+
+    .action:hover:not(:disabled) {
+      transform: translateY(-2px);
+      filter: saturate(1.08) brightness(1.04);
+    }
+
+    .action:active:not(:disabled) { transform: translateY(0); }
+
+    .action:disabled { filter: grayscale(0.15); opacity: 0.7; }
+
+    .error {
+      margin: 10px 0 0;
+      padding: 8px 12px;
+      color: var(--danger);
+      background: var(--danger-bg);
+      border-radius: 12px;
+      flex: 0 0 auto;
+    }
+
+    .error[hidden] { display: none; }
+
+    .envs {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      justify-content: space-evenly;
+      gap: 14px;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .env-block {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 240, 255, 0.55));
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 8px 18px rgba(109, 53, 201, 0.06);
+      backdrop-filter: blur(12px);
+      cursor: pointer;
+    }
+
+    .env-block:has(input:checked) {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 232, 255, 0.78));
+      border-color: rgba(192, 132, 252, 0.9);
+      box-shadow: inset 0 1px 0 #fff, 0 0 0 3px rgba(168, 85, 247, 0.16);
+    }
+
+    .env-block input {
+      width: 18px;
+      height: 18px;
+      margin: 2px 0 0;
+      accent-color: #6d35c9;
+      flex: 0 0 auto;
+    }
+
+    .env-name {
+      color: var(--ink);
+      font-size: 15px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .base-line {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .base-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .base-value {
+      min-width: 0;
+      overflow: hidden;
+      color: #5c4678;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .success {
+      margin: 16px 0 0;
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .success[hidden] { display: none; }
+
+    .output {
+      position: relative;
+      flex: 0 0 auto;
+      margin-top: 18px;
+      padding: 18px 56px 18px 18px;
+      background: linear-gradient(90deg, #f6f0ff 0%, #fdf2fb 100%);
+      border: 1px solid #eadcf8;
+      border-radius: 14px;
+    }
+
+    .output-label {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .output-label.ok { color: var(--accent); }
+    .output-label.wait { color: #9333ea; }
+
+    .value {
+      margin: 0;
+      min-height: 1.5em;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: var(--ink);
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 18px;
+      line-height: 1.5;
+    }
+
+    .value.empty { color: #9b89b0; font-family: "Segoe UI", sans-serif; font-size: 15px; }
+
+    .icon-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      color: #5b21b6;
+      background: #fff;
+      border: 1px solid #e6d6f7;
+      border-radius: 12px;
+      box-shadow: 0 6px 16px rgba(124, 58, 237, 0.12);
+    }
+
+    .icon-btn:hover:not(:disabled) {
+      color: #6d28d9;
+      border-color: #d8b4fe;
+    }
+
+    .icon-btn:disabled {
+      cursor: default;
+      opacity: 0.45;
+    }
+
+    .icon-btn.copied {
+      color: #6d28d9;
+      border-color: #d8b4fe;
+      background: #f6f0ff;
+    }
+
+    .icon-btn svg { width: 18px; height: 18px; }
+    .icon-btn .check { display: none; }
+    .icon-btn.copied .copy { display: none; }
+    .icon-btn.copied .check { display: block; }
+
+    .actions.single { grid-template-columns: 1fr; }
+
+    .output.plain { padding-right: 18px; }
+
+    @media (max-width: 980px) {
+      .env-block { grid-template-columns: auto minmax(0, 1fr); }
+      .env-name { grid-column: 2; }
+      .base-line { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="board">
+    <section class="panel">
+      <header class="head">
+        <h1>Encrypt &amp; Decrypt API</h1>
+        <p class="lede">Encrypt sends a plain LOS identifier to the encrypt API. Decrypt sends an encrypted value back through the decrypt API. The result appears below.</p>
+      </header>
+
+      <label for="value">Encrypted / Decrypted Text
+        <textarea id="value" name="value" placeholder="Paste the exact text to encrypt or decrypt"></textarea>
+      </label>
+
+      <div class="actions">
+        <button class="action encrypt" id="encrypt" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          Encrypt
+        </button>
+        <button class="action decrypt" id="decrypt" type="button">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M8 11V8a4 4 0 0 1 7.2-2.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          Decrypt
+        </button>
+      </div>
+
+      <p class="error" id="error" hidden></p>
+
+      <div class="output">
+        <p class="output-label" id="status">Output</p>
+        <p class="value empty" id="output">Your result will show here.</p>
+        <button class="icon-btn" id="copy" type="button" aria-label="Copy result" disabled>
+          <svg class="copy" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="8" y="8" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M6 16V6a2 2 0 0 1 2-2h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <svg class="check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M5 12.5 9.5 17 19 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header class="head">
+        <h1>Clear Cache API</h1>
+        <p class="lede">Choose an environment, then clear that environment’s cache.</p>
+      </header>
+
+      <fieldset class="envs">
+        <label class="env-block">
+          <input type="radio" name="cacheEnv" value="dev" checked>
+          <span class="env-name">Dev</span>
+          <span class="base-line"><span class="base-label">Base URL:</span><span class="base-value">https://application.dev.veefin.in</span></span>
+        </label>
+        <label class="env-block">
+          <input type="radio" name="cacheEnv" value="staging">
+          <span class="env-name">Staging</span>
+          <span class="base-line"><span class="base-label">Base URL:</span><span class="base-value">https://application.staging.veefin.in</span></span>
+        </label>
+        <label class="env-block">
+          <input type="radio" name="cacheEnv" value="uat">
+          <span class="env-name">UAT</span>
+          <span class="base-line"><span class="base-label">Base URL:</span><span class="base-value">https://application.uat.psbxchange.com</span></span>
+        </label>
+        <label class="env-block">
+          <input type="radio" name="cacheEnv" value="preprod">
+          <span class="env-name">Pre-prod</span>
+          <span class="base-line"><span class="base-label">Base URL:</span><span class="base-value">https://application.preprod.psbxchange.com</span></span>
+        </label>
+        <label class="env-block">
+          <input type="radio" name="cacheEnv" value="prod">
+          <span class="env-name">Prod</span>
+          <span class="base-line"><span class="base-label">Base URL:</span><span class="base-value">https://application.psbxchange.com</span></span>
+        </label>
+      </fieldset>
+
+      <div class="actions single">
+        <button class="action" id="clearCache" type="button">Clear cache</button>
+      </div>
+
+      <p class="error" id="cacheError" hidden></p>
+      <div class="output plain">
+        <p class="output-label" id="cacheStatus">Output</p>
+        <p class="value empty" id="cacheMessage">Result will show here.</p>
+      </div>
+    </section>
+    </div>
+  </main>
+
+  <script>
+    const baseUrl = localStorage.getItem("losTool.baseUrl") || "https://application.dev.veefin.in";
+    const apiKey = localStorage.getItem("losTool.apiKey") || "Y29yZS1sb2dpYzpKQTNjUVdodDZwVjc3eEd1eFFSM0VvclZaWDNEckVXTkZSRVY0TDBRRThFNGRmOGN6aXFVQmZBM0lUcjJpZ29WN2xPWXg0enljQ1JobDJrdHVQVzNJbjV2MU1GY2hpYVRNMlA0cEEyd0NsS3JpR3ZqV2p3RERSTHVtRHpKSzduRg==";
+    const valueInput = document.getElementById("value");
+    const errorEl = document.getElementById("error");
+    const statusEl = document.getElementById("status");
+    const outputEl = document.getElementById("output");
+    const copyBtn = document.getElementById("copy");
+    const buttons = [document.getElementById("encrypt"), document.getElementById("decrypt")];
+    let resultText = "";
+    let copyTimer = 0;
+
+    function setBusy(busy) {
+      buttons.forEach((button) => { button.disabled = busy; });
+    }
+
+    function showError(message) {
+      errorEl.hidden = false;
+      errorEl.textContent = message;
+    }
+
+    function displayValue(payload) {
+      if (payload == null) return "";
+      if (typeof payload === "string") return payload;
+      return JSON.stringify(payload, null, 2);
+    }
+
+    function showOutput(text, label, waiting) {
+      outputEl.textContent = text;
+      outputEl.classList.toggle("empty", waiting || !text);
+      statusEl.textContent = label;
+      statusEl.className = "output-label" + (waiting ? " wait" : " ok");
+      copyBtn.disabled = waiting || !text;
+    }
+
+    async function run(action) {
+      errorEl.hidden = true;
+      const value = valueInput.value.trim();
+      if (!value) {
+        showError("Enter the exact text to encrypt or decrypt.");
+        valueInput.focus();
+        return;
+      }
+      resultText = "";
+      setBusy(true);
+      showOutput("Waiting for the API…", action === "encrypt" ? "Encrypting" : "Decrypting", true);
+
+      try {
+        const response = await fetch("/api/los-id", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action,
+            value,
+            baseUrl,
+            apiKey,
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.error || "Request failed");
+        }
+        const data = payload.body && Object.prototype.hasOwnProperty.call(payload.body, "data")
+          ? payload.body.data
+          : payload.body;
+        resultText = displayValue(data);
+        const message = (payload.body && payload.body.message) || (action === "encrypt" ? "Encryption Done" : "Decryption Done");
+        showOutput(resultText, message, false);
+      } catch (error) {
+        const offline = error instanceof TypeError;
+        resultText = "";
+        showOutput("Your result will show here.", "Output", true);
+        showError(offline
+          ? "This page needs the local server. Run node server.js and open http://127.0.0.1:4173."
+          : error.message);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    document.getElementById("encrypt").addEventListener("click", () => run("encrypt"));
+    document.getElementById("decrypt").addEventListener("click", () => run("decrypt"));
+
+    const cacheError = document.getElementById("cacheError");
+    const cacheStatus = document.getElementById("cacheStatus");
+    const cacheMessage = document.getElementById("cacheMessage");
+    const clearButton = document.getElementById("clearCache");
+    const envRadios = Array.from(document.querySelectorAll('input[name="cacheEnv"]'));
+
+    function selectedEnv() {
+      const picked = envRadios.find((radio) => radio.checked);
+      return picked ? picked.value : "";
+    }
+
+    function resetCacheOutput() {
+      cacheStatus.textContent = "Output";
+      cacheStatus.className = "output-label";
+      cacheMessage.textContent = "Result will show here.";
+      cacheMessage.classList.add("empty");
+      cacheError.hidden = true;
+    }
+
+    envRadios.forEach((radio) => {
+      radio.addEventListener("change", resetCacheOutput);
+    });
+
+    clearButton.addEventListener("click", async () => {
+      const env = selectedEnv();
+      if (!env) {
+        cacheError.hidden = false;
+        cacheError.textContent = "Select an environment.";
+        return;
+      }
+      if (env === "prod" && !window.confirm("Clear the production cache?")) return;
+      cacheError.hidden = true;
+      clearButton.disabled = true;
+      cacheStatus.textContent = "Clearing";
+      cacheStatus.className = "output-label wait";
+      cacheMessage.textContent = "Waiting for the cache API…";
+      cacheMessage.classList.add("empty");
+      try {
+        const response = await fetch("/api/clear-cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ env }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "Request failed");
+        cacheStatus.textContent = "Output";
+        cacheStatus.className = "output-label ok";
+        cacheMessage.textContent = "Cache cleared successfully";
+        cacheMessage.classList.remove("empty");
+      } catch (error) {
+        resetCacheOutput();
+        cacheError.hidden = false;
+        cacheError.textContent = error instanceof TypeError
+          ? "This page needs the local server. Run node server.js and open http://127.0.0.1:4173."
+          : error.message;
+      } finally {
+        clearButton.disabled = false;
+      }
+    });
+
+    async function writeClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (error) {
+          /* fall through to the selection copy */
+        }
+      }
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.top = "0";
+      area.style.left = "0";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (error) {
+        copied = false;
+      }
+      area.remove();
+      return copied;
+    }
+
+    copyBtn.addEventListener("click", async () => {
+      if (!resultText) return;
+      const copied = await writeClipboard(resultText);
+      if (!copied) {
+        showError("Copy was blocked by the browser. Select the result and copy it manually.");
+        return;
+      }
+      errorEl.hidden = true;
+      copyBtn.classList.add("copied");
+      copyBtn.setAttribute("aria-label", "Copied");
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => {
+        copyBtn.classList.remove("copied");
+        copyBtn.setAttribute("aria-label", "Copy result");
+      }, 1400);
+    });
+  </script>
+</body>
+</html>

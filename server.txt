@@ -1,0 +1,193 @@
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+
+const PORT = Number(process.env.PORT) || 4173;
+const INDEX = path.join(__dirname, "index.html");
+
+const PATHS = {
+  encrypt: "/v1/mongo-form-field/encrypt-los-id",
+  decrypt: "/v1/mongo-form-field/decrypt-los-id",
+  clearCache: "/v1/cache/clear",
+};
+
+const CACHE_ENVS = {
+  dev: {
+    host: "https://application.dev.veefin.in",
+    apiKey: "Y29yZS1sb2dpYzpKQTNjUVdodDZwVjc3eEd1eFFSM0VvclZaWDNEckVXTkZSRVY0TDBRRThFNGRmOGN6aXFVQmZBM0lUcjJpZ29WN2xPWXg0enljQ1JobDJrdHVQVzNJbjV2MU1GY2hpYVRNMlA0cEEyd0NsS3JpR3ZqV2p3RERSTHVtRHpKSzduRg==",
+  },
+  staging: {
+    host: "https://application.staging.veefin.in",
+    apiKey: "Y29yZS1sb2dpYzpKQTNjUVdodDZwVjc3eEd1eFFSM0VvclZaWDNEckVXTkZSRVY0TDBRRThFNGRmOGN6aXFVQmZBM0lUcjJpZ29WN2xPWXg0enljQ1JobDJrdHVQVzNJbjV2MU1GY2hpYVRNMlA0cEEyd0NsS3JpR3ZqV2p3RERSTHVtRHpKSzduRg==",
+  },
+  uat: {
+    host: "https://application.uat.psbxchange.com",
+    apiKey: "Y29yZS1sb2dpYzpLSUJHcmJCRHhoTWdVdllwa2xUNm5NMDhTUzg3Tm5oM0tvSVJVM29xbW5lSDkzMHBVd09sd3B5czRSMGdwWERva1B4UjdUNzd5dWpsQW4xamRRMWM3d2dYZzdpNE1hcUhET3JIVzNEVE4xNGluRm12dVZsRW0wcERjTTNIejd5aw",
+  },
+  preprod: {
+    host: "https://application.preprod.psbxchange.com",
+    apiKey: "Y29yZS1sb2dpYzo3Mk9NT0tRVDNSQjUzbWp2cTRUTE5kdXFXRGdkYWpmTkptalFDWk1HaFJIckZqRGtqMzZuZzBEc2VQRzFvc1k5U3Bod0lwVVNYT1Q1OVJYZWM5Y2dOd1FlNnltZHJuaTNhaFUzSGNDZ1pwMmI3QnhuRnVLYVRjQ014SFVKeGxDTw",
+  },
+  prod: {
+    host: "https://application.psbxchange.com",
+    apiKey: "Y29yZS1sb2dpYzo0R2p6dUowb3F1YnVvSlhJQ0M3YkdzbGV4cjZrVzZNd05tQUJVMVl1RjBpQVdSajFzVFJmejFaVmd3TDc4eFdYOFEzWVc1R1NjOXpsNDQ4RGZIOGIxTTRQU0ZDc3p0TUpLMUtsUGFPNGpIdDhZS1l5TG9hcmV5M2hxVVN4RFQ1cA",
+  },
+};
+
+function send(res, status, body, type) {
+  const payload = Buffer.isBuffer(body) || typeof body === "string" ? body : JSON.stringify(body);
+  res.writeHead(status, {
+    "Content-Type": type || "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  });
+  res.end(payload);
+}
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        reject(Object.assign(new Error("Request body is too large"), { status: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch (error) {
+        reject(Object.assign(new Error("Request body must be JSON"), { status: 400 }));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+async function proxyLosId(body) {
+  const action = body && body.action;
+  const value = body && typeof body.value === "string" ? body.value.trim() : "";
+  const apiKey = body && typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  const baseUrl = body && typeof body.baseUrl === "string" ? body.baseUrl.trim() : "";
+
+  if (action !== "encrypt" && action !== "decrypt") {
+    throw Object.assign(new Error("Choose encrypt or decrypt"), { status: 400 });
+  }
+  if (!value) {
+    throw Object.assign(new Error("Enter a LOS unique identifier"), { status: 400 });
+  }
+  if (!apiKey) {
+    throw Object.assign(new Error("Enter an API key"), { status: 400 });
+  }
+
+  let base;
+  try {
+    base = new URL(baseUrl);
+  } catch (error) {
+    throw Object.assign(new Error("Base URL is not valid"), { status: 400 });
+  }
+  if (base.protocol !== "https:") {
+    throw Object.assign(new Error("Base URL must use https"), { status: 400 });
+  }
+
+  const target = new URL(PATHS[action], base.origin);
+  target.searchParams.set("losuniqueidentifier", value);
+  const result = await callUpstream(target, apiKey);
+  return { action, status: result.status, body: result.body };
+}
+
+async function clearCache(body) {
+  const env = body && typeof body.env === "string" ? body.env.trim() : "";
+  const targetEnv = CACHE_ENVS[env];
+
+  if (!targetEnv) {
+    throw Object.assign(new Error("Choose dev, staging, uat, pre-prod, or prod"), { status: 400 });
+  }
+
+  const target = new URL(PATHS.clearCache, targetEnv.host);
+  const result = await callUpstream(target, targetEnv.apiKey);
+  return { env, status: result.status, body: result.body };
+}
+
+async function callUpstream(target, apiKey) {
+  let upstream;
+  try {
+    upstream = await fetch(target, {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        "API-KEY": apiKey,
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    const reason = error && error.name === "TimeoutError" ? "timed out" : "could not be reached";
+    throw Object.assign(new Error("Application host " + reason), { status: 502 });
+  }
+
+  if (upstream.status >= 300 && upstream.status < 400) {
+    throw Object.assign(new Error("Application host returned a redirect"), { status: 502 });
+  }
+
+  const text = await upstream.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch (error) {
+    parsed = null;
+  }
+
+  if (!upstream.ok) {
+    const message =
+      (parsed && (parsed.message || parsed.error)) ||
+      text.slice(0, 300) ||
+      "Request failed with status " + upstream.status;
+    throw Object.assign(new Error(message), { status: upstream.status });
+  }
+
+  return {
+    status: upstream.status,
+    body: parsed !== null ? parsed : { data: text },
+  };
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, "http://127.0.0.1");
+
+  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+    fs.readFile(INDEX, (error, file) => {
+      if (error) {
+        send(res, 500, { error: "Page file is missing" });
+        return;
+      }
+      send(res, 200, file, "text/html; charset=utf-8");
+    });
+    return;
+  }
+
+  if (req.method === "POST" && (url.pathname === "/api/los-id" || url.pathname === "/api/clear-cache")) {
+    try {
+      const body = await readJson(req);
+      const result = url.pathname === "/api/los-id" ? await proxyLosId(body) : await clearCache(body);
+      send(res, 200, result);
+    } catch (error) {
+      send(res, error.status || 500, { error: error.message || "Request failed" });
+    }
+    return;
+  }
+
+  send(res, 404, { error: "Not found" });
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  console.log("LOS ID tool: http://127.0.0.1:" + PORT);
+});
